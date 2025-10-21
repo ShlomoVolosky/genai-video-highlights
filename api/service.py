@@ -1,22 +1,40 @@
+import os
 from typing import List
 from app.db.repository import Repository
-from app.llm.gemini_client import GeminiClient
+from app.llm.llm_client import UnifiedLLMClient
 
 class ChatService:
     """
     DB-only answering:
-    1) embed question (Gemini embeddings only)
-    2) vector search in pgvector (top-k highlights)
+    1) If any LLM API key available (GOOGLE_API_KEY, OPENAI_API_KEY, CLAUDE_API_KEY): embed question → vector search in pgvector
+    2) Else: keyword ILIKE search on description/llm_summary
     3) compose answer from DB rows (no LLM generation)
     """
     def __init__(self, top_k: int = 5):
         self.repo = Repository()
-        self.embedder = GeminiClient()
         self.top_k = top_k
+        # Try to initialize embedder with any available LLM client
+        self.embedder = None
+        if os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("CLAUDE_API_KEY"):
+            try:
+                self.embedder = UnifiedLLMClient()
+            except Exception as e:
+                print(f"⚠️ Failed to initialize LLM client: {e}")
+                self.embedder = None
 
     def answer(self, question: str) -> tuple[str, List[dict]]:
-        q_emb = self.embedder.embed(question)
-        rows = self.repo.vector_search(q_emb, top_k=self.top_k)  # list of dicts with score
+        # Try vector search if embedder is available
+        if self.embedder:
+            try:
+                q_emb = self.embedder.embed(question)
+                rows = self.repo.vector_search(q_emb, top_k=self.top_k)
+            except Exception as e:
+                print(f"⚠️ Vector search failed: {e}, falling back to keyword search")
+                rows = self.repo.keyword_search(question, top_k=self.top_k)
+        else:
+            # Fallback to keyword search
+            rows = self.repo.keyword_search(question, top_k=self.top_k)
+        
         if not rows:
             return "I couldn't find relevant highlights for that question.", []
 

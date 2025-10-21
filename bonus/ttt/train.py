@@ -1,3 +1,4 @@
+# bonus/ttt/train.py
 import os
 import argparse
 import numpy as np
@@ -9,77 +10,95 @@ from env import TicTacToeEnv
 from opponents import random_move, heuristic_move
 from model import build_policy
 
-# sampling from masked logits
-def masked_sample(logits: np.ndarray, legal):
-    masked = logits.copy()
-    illegal = [i for i in range(9) if i not in legal]
+# -------- helpers --------
+
+def select_opponent(name: str) -> str:
+    n = name.lower()
+    if n.startswith("easy"): return "easy"
+    if n.startswith("medium"): return "medium"
+    return "hard"
+
+def masked_softmax(logits: tf.Tensor, legal_mask: tf.Tensor) -> tf.Tensor:
+    """legal_mask: shape (9,) bool; returns (9,) probs."""
+    minus_inf = tf.fill(tf.shape(logits), tf.constant(-1e9, dtype=logits.dtype))
+    masked = tf.where(legal_mask, logits, minus_inf)
+    return tf.nn.softmax(masked)
+
+def masked_sample_np(logits_np: np.ndarray, legal_idxs: list[int]) -> int:
+    masked = logits_np.copy()
+    illegal = [i for i in range(9) if i not in legal_idxs]
     masked[illegal] = -1e9
     probs = tf.nn.softmax(masked).numpy()
     probs = probs / probs.sum()
     return int(np.random.choice(9, p=probs))
 
-def select_opponent(name: str):
-    name = name.lower()
-    if name.startswith("easy"): return "easy"
-    if name.startswith("medium"): return "medium"
-    return "hard"
+# -------- one episode rollout (collect trajectory) --------
 
-def agent_action(model, obs, legal):
-    logits = model(obs[None, :], training=False).numpy()[0]
-    return masked_sample(logits, legal)
-
-def play_episode(model, opponent="easy", gamma=0.99):
+def play_episode_collect(model: tf.keras.Model, opponent: str):
+    """
+    Rollout one game, collecting:
+      obs_list: (T, 9) float32
+      mask_list: (T, 9) bool
+      act_list: (T,) int
+      rew_list: python list of float rewards (only on agent turns)
+      winner: 1 (agent X), -1 (opponent O), or None
+    Agent plays X (+1). Opponent plays O (-1).
+    """
     env = TicTacToeEnv(agent_mark=1)
-    obs = env.reset()
+    obs = env.reset().astype(np.float32)
 
-    logps = []
-    rewards = []
+    obs_list, mask_list, act_list, rew_list = [], [], [], []
 
     while True:
         legal = env.legal_actions()
         if env.turn == env.agent_mark:
-            # agent turn
-            with tf.GradientTape() as tape:
-                logits = model(obs[None, :], training=True)[0]
-                mask = np.full(9, False)
-                mask[legal] = True
-                masked = tf.where(mask, logits, tf.fill([9], -1e9))
-                probs = tf.nn.softmax(masked)
-                dist = tf.random.categorical(tf.math.log(probs[None, :]), 1)
-                a = int(dist.numpy()[0,0])
-                logp = tf.math.log(tf.clip_by_value(probs[a], 1e-8, 1.0))
+            # Agent (X) turn
+            logits = model(obs[None, :], training=False).numpy()[0]
+            a = masked_sample_np(logits, legal)
             obs_next, r, done, _ = env.step(a)
-            logps.append((tape, logp))
-            rewards.append(r)
-            obs = obs_next
+            # record transition
+            obs_list.append(obs.copy())
+            mask = np.zeros(9, dtype=bool); mask[legal] = True
+            mask_list.append(mask)
+            act_list.append(a)
+            rew_list.append(r)
+            obs = obs_next.astype(np.float32)
             if done: break
         else:
-            # opponent (O)
+            # Opponent (O) turn
             if opponent == "easy":
                 a = random_move(env.board, legal)
             elif opponent == "medium":
                 a = heuristic_move(env.board, legal, mark=-1)
             else:
-                # self-play: mirror board and use same policy
-                mirror = -env.board.copy().astype(np.float32)
-                a = agent_action(model, mirror, legal)
+                # self-play: mirror board and use same policy to pick
+                mirror = (-env.board).astype(np.float32)
+                logits = model(mirror[None, :], training=False).numpy()[0]
+                a = masked_sample_np(logits, legal)
             obs, _, done, _ = env.step(a)
+            obs = obs.astype(np.float32)
             if done: break
 
-    # discounted returns
-    G = 0.0
-    returns = []
-    for r in reversed(rewards):
-        G = r + gamma * G
-        returns.append(G)
-    returns.reverse()
-    if not returns:
-        returns = [0.0]
-    returns = np.array(returns, dtype=np.float32)
-    # normalize
-    returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+    return (
+        np.array(obs_list, dtype=np.float32),
+        np.array(mask_list, dtype=bool),
+        np.array(act_list, dtype=np.int32),
+        rew_list,
+        env.winner,
+    )
 
-    return logps, returns, env.winner
+def discounted_returns(rews, gamma: float) -> np.ndarray:
+    G = 0.0
+    out = []
+    for r in reversed(rews):
+        G = r + gamma * G
+        out.append(G)
+    out.reverse()
+    if not out:
+        out = [0.0]
+    return np.asarray(out, dtype=np.float32)
+
+# -------- training loop --------
 
 def train(args):
     os.makedirs(args.outdir, exist_ok=True)
@@ -92,21 +111,31 @@ def train(args):
     loss_hist, win_hist, draw_hist, lose_hist = [], [], [], []
 
     for ep in range(1, args.episodes + 1):
-        logps, returns, winner = play_episode(model, opponent=opponent, gamma=args.gamma)
+        obs_arr, mask_arr, act_arr, rew_list, winner = play_episode_collect(model, opponent)
 
-        with tf.GradientTape(persistent=True) as outer_tape:
-            # accumulate policy gradient loss
-            loss_terms = []
-            for (tape, logp), G in zip(logps, returns):
-                loss_terms.append(-logp * G)
-            if loss_terms:
-                loss = tf.reduce_sum(loss_terms)
-            else:
-                loss = tf.constant(0.0)
+        # compute normalized returns
+        returns = discounted_returns(rew_list, gamma=args.gamma)
+        # normalize for variance reduction
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
-        grads = outer_tape.gradient(loss, model.trainable_variables)
+        with tf.GradientTape() as tape:
+            # recompute logits for each step and build REINFORCE loss
+            logits = model(obs_arr, training=True)  # (T,9)
+            # apply masks step-wise
+            masks_tf = tf.convert_to_tensor(mask_arr, dtype=tf.bool)   # (T,9)
+            masked = tf.where(masks_tf, logits, tf.fill(tf.shape(logits), tf.constant(-1e9, logits.dtype)))
+            probs = tf.nn.softmax(masked, axis=-1)                     # (T,9)
+
+            # gather chosen probs
+            idx = tf.stack([tf.range(tf.shape(probs)[0]), tf.convert_to_tensor(act_arr, dtype=tf.int32)], axis=1)
+            chosen_probs = tf.gather_nd(probs, idx)                    # (T,)
+            logp = tf.math.log(tf.clip_by_value(chosen_probs, 1e-8, 1.0))
+
+            G = tf.convert_to_tensor(returns, dtype=tf.float32)        # (T,)
+            loss = -tf.reduce_sum(logp * G)
+
+        grads = tape.gradient(loss, model.trainable_variables)
         opt.apply_gradients(zip(grads, model.trainable_variables))
-        del outer_tape
 
         loss_hist.append(float(loss.numpy()))
         win_hist.append(1 if winner == 1 else 0)
@@ -125,20 +154,17 @@ def train(args):
     print(f"Saved: {model_path}")
 
     # plots
-    fig, ax = plt.subplots(1, 2, figsize=(10,4))
+    fig, ax = plt.subplots(1, 2, figsize=(10, 4))
     ax[0].plot(loss_hist); ax[0].set_title("Policy Loss"); ax[0].set_xlabel("Episode"); ax[0].set_ylabel("Loss")
-
     window = max(10, args.log_every)
     def roll(xs):
-        if len(xs) < window: return xs
-        xs = np.array(xs, dtype=np.float32)
-        k = np.convolve(xs, np.ones(window)/window, mode="valid")
-        return k
+        xs = np.asarray(xs, dtype=np.float32)
+        if xs.size < window: return xs
+        return np.convolve(xs, np.ones(window)/window, mode="valid")
     ax[1].plot(roll(win_hist), label="win")
     ax[1].plot(roll(draw_hist), label="draw")
     ax[1].plot(roll(lose_hist), label="lose")
     ax[1].legend(); ax[1].set_title(f"Outcomes vs {opponent}")
-    import matplotlib.pyplot as plt
     plt.tight_layout()
     png_path = os.path.join(args.outdir, f"training_{opponent}.png")
     plt.savefig(png_path, dpi=150)
@@ -146,7 +172,7 @@ def train(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--opponent", default="easy", choices=["easy","medium","hard"])
+    ap.add_argument("--opponent", default="easy", choices=["easy", "medium", "hard"])
     ap.add_argument("--episodes", type=int, default=4000)
     ap.add_argument("--gamma", type=float, default=0.99)
     ap.add_argument("--lr", type=float, default=2e-3)

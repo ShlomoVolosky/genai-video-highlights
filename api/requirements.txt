@@ -1,0 +1,15 @@
+# FastAPI backend requirements for Step 2 Chat
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.8.0
+python-dotenv>=1.0.0
+
+# Database
+SQLAlchemy>=2.0.35
+psycopg2-binary>=2.9.9
+pgvector
+
+# LLM clients (reuse from Step 1)
+anthropic>=0.7.0
+google-generativeai>=0.8.3
+openai>=1.0.0

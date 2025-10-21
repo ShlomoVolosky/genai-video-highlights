@@ -64,3 +64,22 @@ class Repository:
                 {"q": query_emb, "k": top_k},
             )
             return [dict(r._mapping) for r in res]
+
+    def keyword_search(self, query: str, top_k: int = 5) -> list[dict]:
+        """Keyword search using ILIKE on description and llm_summary fields"""
+        with self.Session() as s:
+            search_pattern = f"%{query}%"
+            res = s.execute(
+                text(
+                    """
+                    SELECT id, video_id, ts_start_sec, ts_end_sec, description, llm_summary, objects,
+                           0.5 AS score
+                    FROM highlights
+                    WHERE description ILIKE :pattern OR llm_summary ILIKE :pattern
+                    ORDER BY video_id, ts_start_sec
+                    LIMIT :k
+                    """
+                ),
+                {"pattern": search_pattern, "k": top_k},
+            )
+            return [dict(r._mapping) for r in res]
