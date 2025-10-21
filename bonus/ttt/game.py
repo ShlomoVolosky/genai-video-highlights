@@ -49,9 +49,9 @@ class GUI:
 
     def load_model(self):
         opponent = self.difficulty.get()
-        path = f"bonus_out_tf/ttt_policy_{opponent}.keras"
+        path = f"bonus_out/ttt_policy_{opponent}.keras"
         if not os.path.exists(path):
-            messagebox.showinfo("Info", f"Model not found: {path}\nTrain first with:\npython bonus/ttt_tf/train.py --opponent {opponent}")
+            messagebox.showinfo("Info", f"Model not found: {path}\nTrain first with:\npython bonus/ttt/train.py --opponent {opponent}")
             return
         self.model = tf.keras.models.load_model(path)
         messagebox.showinfo("Loaded", f"Loaded model: {path}")

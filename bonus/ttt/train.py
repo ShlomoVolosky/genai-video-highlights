@@ -177,6 +177,6 @@ if __name__ == "__main__":
     ap.add_argument("--gamma", type=float, default=0.99)
     ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--log-every", type=int, default=200)
-    ap.add_argument("--outdir", default="bonus_out_tf")
+    ap.add_argument("--outdir", default="bonus_out")
     args = ap.parse_args()
     train(args)
