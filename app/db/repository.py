@@ -51,17 +51,19 @@ class Repository:
 
     def vector_search(self, query_emb: list[float], top_k: int = 5) -> list[dict]:
         with self.Session() as s:
+            # Convert list to proper vector format for pgvector
+            vector_str = "[" + ",".join(map(str, query_emb)) + "]"
             res = s.execute(
                 text(
                     """
                     SELECT id, video_id, ts_start_sec, ts_end_sec, description, llm_summary, objects,
-                           1 - (embedding <=> :q) AS score
+                           1 - (embedding <=> %(q)s::vector) AS score
                     FROM highlights
-                    ORDER BY embedding <=> :q
-                    LIMIT :k
+                    ORDER BY embedding <=> %(q)s::vector
+                    LIMIT %(k)s
                     """
                 ),
-                {"q": query_emb, "k": top_k},
+                {"q": vector_str, "k": top_k},
             )
             return [dict(r._mapping) for r in res]
 
