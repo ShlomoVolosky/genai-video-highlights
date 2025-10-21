@@ -3,8 +3,10 @@ from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
-    # LLM
+    # LLM - Support Gemini, OpenAI, and Claude
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    claude_api_key: str = Field(default="", alias="CLAUDE_API_KEY")
 
     # DB
     postgres_user: str = Field(default="appuser", alias="POSTGRES_USER")

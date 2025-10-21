@@ -1,0 +1,21 @@
+Collecting anthropic
+  Downloading anthropic-0.71.0-py3-none-any.whl (355 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 355.0/355.0 KB 995.0 kB/s eta 0:00:00
+Requirement already satisfied: jiter<1,>=0.4.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (0.11.1)
+Requirement already satisfied: anyio<5,>=3.5.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (4.11.0)
+Requirement already satisfied: sniffio in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (1.3.1)
+Collecting docstring-parser<1,>=0.15
+  Downloading docstring_parser-0.17.0-py3-none-any.whl (36 kB)
+Requirement already satisfied: typing-extensions<5,>=4.10 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (4.15.0)
+Requirement already satisfied: distro<2,>=1.7.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (1.9.0)
+Requirement already satisfied: httpx<1,>=0.25.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (0.28.1)
+Requirement already satisfied: pydantic<3,>=1.9.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anthropic) (2.8.2)
+Requirement already satisfied: idna>=2.8 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anyio<5,>=3.5.0->anthropic) (3.11)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from anyio<5,>=3.5.0->anthropic) (1.3.0)
+Requirement already satisfied: certifi in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from httpx<1,>=0.25.0->anthropic) (2025.10.5)
+Requirement already satisfied: httpcore==1.* in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from httpx<1,>=0.25.0->anthropic) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from httpcore==1.*->httpx<1,>=0.25.0->anthropic) (0.16.0)
+Requirement already satisfied: pydantic-core==2.20.1 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from pydantic<3,>=1.9.0->anthropic) (2.20.1)
+Requirement already satisfied: annotated-types>=0.4.0 in /home/shlomo/Desktop/Projects/project-genai/lib/python3.10/site-packages (from pydantic<3,>=1.9.0->anthropic) (0.7.0)
+Installing collected packages: docstring-parser, anthropic
+Successfully installed anthropic-0.71.0 docstring-parser-0.17.0

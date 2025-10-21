@@ -1,31 +1,56 @@
 import json
 from typing import Tuple, Optional
-from app.llm.gemini_client import GeminiClient
+from app.llm.llm_client import UnifiedLLMClient
 from app.types import HighlightModel, DetectedObjectModel
 
-SYSTEM_PROMPT = """You are an expert video analyst.
+SYSTEM_PROMPT = """You are an expert video analyst specializing in identifying important moments.
+
+IMPORTANT HIGHLIGHT CRITERIA - A scene is a highlight if it contains ANY of these:
+
+🎤 PEOPLE SPEAKING:
+- Any speech/dialogue detected in transcript
+- Conversations, presentations, interviews
+- Narration or commentary
+
+🚗 VEHICLE MOVEMENT:
+- Cars, trucks, motorcycles, bicycles in motion
+- Vehicle-related activity or scenes
+- Transportation events
+
+💥 EXPLOSIVE/DRAMATIC EVENTS:
+- Explosions, fires, crashes
+- Sudden movements or action
+- High-energy visual events
+
+👥 HUMAN ACTIVITY:
+- People performing actions
+- Social interactions
+- Notable human behavior
+
+🎬 VISUAL INTEREST:
+- Scene changes or transitions
+- Multiple objects present
+- Dynamic visual content
+
 Given:
-- a scene time range in seconds
-- speech transcript snippets (if any) from that range
-- objects detected (e.g., person, car, dog, fire, explosion)
+- Scene time range in seconds
+- Speech transcript (if people are speaking)
+- Objects detected (people, vehicles, etc.)
 
-Pick if this segment is an IMPORTANT HIGHLIGHT (true/false).
-If true, write:
-- a vivid but factual description (1-3 sentences)
-- a 1-sentence summary
-- a confidence score 0..1.
+DECISION RULE: If ANY of the above criteria are met, mark as highlight=true.
+Be GENEROUS in identifying highlights - err on the side of inclusion.
 
-Return strict JSON list of objects:
+Return JSON:
 {
   "is_highlight": true|false,
-  "description": "...",
-  "summary": "...",
+  "description": "Detailed description of what makes this moment interesting",
+  "summary": "One sentence summary",
   "confidence": 0.0
 }
 """
 
 class HighlightSelector:
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: UnifiedLLMClient):
         self.client = client
 
     def analyze_segment(

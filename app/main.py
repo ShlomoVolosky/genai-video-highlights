@@ -8,7 +8,7 @@ from app.processors.audio_transcriber import AudioTranscriber
 from app.processors.scene_detector import SceneDetector
 from app.processors.frame_sampler import FrameSampler
 from app.processors.object_detector import ObjectDetector
-from app.llm.gemini_client import GeminiClient
+from app.llm.llm_client import UnifiedLLMClient
 from app.llm.highlight_selector import HighlightSelector
 from app.types import HighlightModel, VideoRecord
 
@@ -24,7 +24,7 @@ class VideoProcessor:
         self.scenes = SceneDetector()
         self.sampler = FrameSampler(Config.frame_sample_every_sec)
         self.objects = ObjectDetector(Config.yolo_model)
-        self.llm_client = GeminiClient()
+        self.llm_client = UnifiedLLMClient()
         self.selector = HighlightSelector(self.llm_client)
 
     def process(self, source: str) -> tuple[VideoRecord, List[HighlightModel]]:
@@ -44,7 +44,7 @@ class VideoProcessor:
 
         # 5) per-scene: frames → objects → LLM
         highlights: List[HighlightModel] = []
-        for (start, end) in tqdm(segs, desc="Analyzing scenes"):
+        for i, (start, end) in enumerate(tqdm(segs, desc="Analyzing scenes")):
             frames = self.sampler.sample(vpath, start, end)
             objs = self.objects.detect_in_frames(frames)
             hl = self.selector.analyze_segment((start, end), transcript, objs)
@@ -53,6 +53,11 @@ class VideoProcessor:
                 emb = self.selector.embed_desc(hl.description)
                 hl.embedding = emb
                 highlights.append(hl)
+                
+                # Light rate limiting: small delay between API calls
+                if i < len(segs) - 1:  # Don't wait after the last scene
+                    import time
+                    time.sleep(1)  # Short delay to be respectful to API
 
         if highlights:
             self.repo.add_highlights(video.id, highlights)

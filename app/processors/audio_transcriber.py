@@ -28,17 +28,43 @@ def _probe_duration_ffprobe(path_or_url: str) -> float:
 
 class AudioTranscriber(Transcriber):
     """
-    Simple transcriber for local video files.
-    Returns empty transcript but extracts duration using ffprobe.
+    Audio transcriber that extracts speech-to-text from video files.
+    Uses OpenAI Whisper for speech recognition to detect "people speaking".
     """
     def __init__(self, model_name: str = "base"):
-        # No heavy dependencies - just use ffprobe for duration
-        pass
+        self.model_name = model_name
+        # Try to load Whisper, fallback gracefully if not available
+        try:
+            import whisper
+            self.whisper_model = whisper.load_model(model_name)
+            self.has_whisper = True
+            print(f"✅ Whisper model '{model_name}' loaded for speech-to-text")
+        except Exception as e:
+            print(f"⚠️ Whisper not available: {e}")
+            print("   Installing: pip install openai-whisper")
+            self.whisper_model = None
+            self.has_whisper = False
+
+    def _extract_audio(self, video_path: str) -> str:
+        """Extract audio from video for transcription"""
+        import tempfile
+        wav_path = tempfile.mktemp(suffix=".wav")
+        try:
+            # Extract audio using ffmpeg
+            subprocess.run([
+                "ffmpeg", "-y", "-i", video_path, 
+                "-vn", "-ac", "1", "-ar", "16000", 
+                wav_path
+            ], check=True, capture_output=True)
+            return wav_path
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️ Audio extraction failed: {e}")
+            return None
 
     def transcribe(self, video_path: str) -> Tuple[str, float]:
         """
-        Extract duration from local video file.
-        Returns empty transcript and video duration.
+        Extract speech-to-text transcript and duration from video.
+        This enables detection of 'people speaking' as required.
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -46,6 +72,32 @@ class AudioTranscriber(Transcriber):
         # Get duration using ffprobe
         duration = _probe_duration_ffprobe(video_path)
         
-        # Return empty transcript with duration
-        # In a real implementation, you could integrate with speech-to-text services
+        # Try to get transcript using Whisper
+        if self.has_whisper and self.whisper_model:
+            try:
+                # Extract audio for transcription
+                audio_path = self._extract_audio(video_path)
+                if audio_path and os.path.exists(audio_path):
+                    # Transcribe with Whisper
+                    result = self.whisper_model.transcribe(audio_path, fp16=False)
+                    transcript = result.get("text", "").strip()
+                    
+                    # Clean up temporary audio file
+                    try:
+                        os.remove(audio_path)
+                    except:
+                        pass
+                    
+                    if transcript:
+                        print(f"🎤 Speech detected: {len(transcript)} characters")
+                        return transcript, duration
+                    else:
+                        print("🔇 No speech detected in audio")
+                        return "", duration
+                        
+            except Exception as e:
+                print(f"⚠️ Transcription failed: {e}")
+        
+        # Fallback: return empty transcript but correct duration
+        print("📝 No speech-to-text available, using duration only")
         return "", duration
