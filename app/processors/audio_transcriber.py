@@ -33,15 +33,15 @@ class AudioTranscriber(Transcriber):
     """
     def __init__(self, model_name: str = "base"):
         self.model_name = model_name
-        # Try to load Whisper, fallback gracefully if not available
+        # Try to load faster-whisper, fallback gracefully if not available
         try:
-            import whisper
-            self.whisper_model = whisper.load_model(model_name)
+            from faster_whisper import WhisperModel
+            self.whisper_model = WhisperModel(model_name, device="cpu", compute_type="int8")
             self.has_whisper = True
-            print(f"✅ Whisper model '{model_name}' loaded for speech-to-text")
+            print(f"✅ Faster-Whisper model '{model_name}' loaded for speech-to-text")
         except Exception as e:
-            print(f"⚠️ Whisper not available: {e}")
-            print("   Installing: pip install openai-whisper")
+            print(f"⚠️ Faster-Whisper not available: {e}")
+            print("   Installing: pip install faster-whisper")
             self.whisper_model = None
             self.has_whisper = False
 
@@ -78,9 +78,9 @@ class AudioTranscriber(Transcriber):
                 # Extract audio for transcription
                 audio_path = self._extract_audio(video_path)
                 if audio_path and os.path.exists(audio_path):
-                    # Transcribe with Whisper
-                    result = self.whisper_model.transcribe(audio_path, fp16=False)
-                    transcript = result.get("text", "").strip()
+                    # Transcribe with faster-whisper
+                    segments, info = self.whisper_model.transcribe(audio_path, beam_size=5)
+                    transcript = " ".join([segment.text for segment in segments]).strip()
                     
                     # Clean up temporary audio file
                     try:
