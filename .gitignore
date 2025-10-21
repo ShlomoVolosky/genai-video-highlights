@@ -38,6 +38,9 @@ tmp/
 temp/
 logs/
 *.log
+# Ignore weird files created by pip or shell redirection
+=create*
+=*.*
 
 # ------------------------------
 # Docker
