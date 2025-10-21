@@ -31,8 +31,8 @@ class VideoProcessor:
         # 1) get video (path, uid)
         vpath, uid = self.downloader.fetch(source)
 
-        # 2) transcription
-        transcript, duration = self.transcriber.transcribe(vpath)
+        # 2) # Pass the *source* (URL or local path). The transcriber accepts either.
+        transcript, duration = self.transcriber.transcribe(source)
 
         # 3) register video
         video = self.repo.upsert_video(source=source, video_uid=uid, duration_sec=int(duration) if duration else None)
