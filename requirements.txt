@@ -1,6 +1,5 @@
 # Core
 ffmpeg-python==0.2.0
-yt-dlp==2025.1.15
 pydantic==2.8.2
 pydantic-settings
 python-dotenv==1.0.1

@@ -28,11 +28,11 @@ class VideoProcessor:
         self.selector = HighlightSelector(self.llm_client)
 
     def process(self, source: str) -> tuple[VideoRecord, List[HighlightModel]]:
-        # 1) get video (path, uid)
+        # 1) get video (path, uid) - source should be a local file path
         vpath, uid = self.downloader.fetch(source)
 
-        # 2) # Pass the *source* (URL or local path). The transcriber accepts either.
-        transcript, duration = self.transcriber.transcribe(source)
+        # 2) transcribe the processed video file
+        transcript, duration = self.transcriber.transcribe(vpath)
 
         # 3) register video
         video = self.repo.upsert_video(source=source, video_uid=uid, duration_sec=int(duration) if duration else None)
