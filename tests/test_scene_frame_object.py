@@ -48,6 +48,7 @@ def test_object_detector(monkeypatch):
         def predict(self, frames, conf=0.35, verbose=False): return [FakeRes()]
     import app.processors.object_detector as od_mod
     monkeypatch.setattr(od_mod, "YOLO", FakeYOLO)
+    monkeypatch.setattr(od_mod, "_HAVE_YOLO", True)  # Enable YOLO for this test
     det = ObjectDetector("yolov8n.pt", conf=0.35)
     objs = det.detect_in_frames([1,2,3])
     names = sorted([o.name for o in objs])

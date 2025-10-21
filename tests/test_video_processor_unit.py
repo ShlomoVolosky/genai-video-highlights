@@ -1,8 +1,19 @@
 from app.main import VideoProcessor
-from app.types import DetectedObjectModel, HighlightModel
+from app.types import DetectedObjectModel, HighlightModel, VideoRecord
 
 
 def test_video_processor_flow(mocker, fake_gemini, tmpdir):
+    # Mock the Repository class before VideoProcessor is created
+    class FakeRepo:
+        def create_schema(self):
+            pass
+        def upsert_video(self, source, video_uid, duration_sec):
+            return VideoRecord(id=1, source=source, video_uid=video_uid, duration_sec=duration_sec)
+        def add_highlights(self, video_id, highlights):
+            return [1]
+    
+    mocker.patch("app.main.Repository", return_value=FakeRepo())
+    
     vp = VideoProcessor()
 
     # Mock downloader -> returns a "video path" and uid

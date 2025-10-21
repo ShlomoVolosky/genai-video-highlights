@@ -34,3 +34,21 @@ def fake_gemini_text():
 @pytest.fixture
 def fake_objects():
     return [{"name": "person", "confidence": 0.91}, {"name": "car", "confidence": 0.66}]
+
+@pytest.fixture
+def fake_gemini():
+    """Mock GeminiClient for tests"""
+    class FakeGeminiClient:
+        def generate(self, prompt: str) -> str:
+            return json.dumps([{
+                "is_highlight": True,
+                "description": "A person enters the room and starts speaking.",
+                "summary": "This is a key moment in the video.",
+                "confidence": 0.87
+            }])
+        
+        def embed(self, text: str) -> list[float]:
+            # Return a 768-dimensional vector of zeros for testing
+            return [0.0] * 768
+    
+    return FakeGeminiClient()

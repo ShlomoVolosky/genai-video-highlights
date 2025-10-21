@@ -1,5 +1,5 @@
 import math
-from scenedetect import detect, ContentDetector, VideoStream
+from scenedetect import detect, ContentDetector
 from app.processors.interfaces import SceneFinder
 
 
@@ -8,8 +8,7 @@ class SceneDetector(SceneFinder):
         self.threshold = threshold
 
     def detect_scenes(self, video_path: str) -> list[tuple[int, int]]:
-        vs = VideoStream(video_path)
-        scenes = detect(video=vs, detector=ContentDetector(threshold=self.threshold))
+        scenes = detect(video_path, ContentDetector(threshold=self.threshold))
         out: list[tuple[int, int]] = []
         for s in scenes:
             start_sec = math.floor(s[0].get_seconds())

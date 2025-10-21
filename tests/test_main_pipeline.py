@@ -1,7 +1,20 @@
 from types import SimpleNamespace
 from app.main import VideoProcessor
+from app.types import VideoRecord
 
 def test_main_pipeline_mocks(monkeypatch):
+    # Mock the Repository to avoid database connection
+    class FakeRepo:
+        def create_schema(self):
+            pass
+        def upsert_video(self, source, video_uid, duration_sec):
+            return VideoRecord(id=1, source=source, video_uid=video_uid, duration_sec=duration_sec)
+        def add_highlights(self, video_id, highlights):
+            return [1, 2]
+    
+    # Patch Repository class before VideoProcessor is created
+    monkeypatch.setattr("app.main.Repository", lambda: FakeRepo())
+    
     vp = VideoProcessor()
 
     # Mock downloader
