@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  chat_api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # reuse same env as the app service:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apppass}
+      POSTGRES_DB: ${POSTGRES_DB:-highlights_db}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-004}
+      GENERATION_MODEL: ${GENERATION_MODEL:-gemini-1.5-flash}
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    command: ["bash", "-lc", "uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"]
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./web
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    depends_on:
+      - chat_api
+    ports:
+      - "5173:5173"
