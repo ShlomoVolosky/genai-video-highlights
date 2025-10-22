@@ -83,18 +83,38 @@ class Repository:
     def keyword_search(self, query: str, top_k: int = 5) -> list[dict]:
         """Keyword search using ILIKE on description and llm_summary fields"""
         with self.Session() as s:
-            search_pattern = f"%{query}%"
+            # Extract meaningful keywords from the query
+            import re
+            # Remove common stop words and extract meaningful terms
+            stop_words = {'what', 'happened', 'during', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'show', 'me', 'find', 'scenes'}
+            words = re.findall(r'\b\w+\b', query.lower())
+            keywords = [w for w in words if w not in stop_words and len(w) > 2]
+            
+            if not keywords:
+                # If no meaningful keywords, use the original query
+                keywords = [query]
+            
+            # Build OR conditions for each keyword
+            conditions = []
+            params = {"k": top_k}
+            for i, keyword in enumerate(keywords[:3]):  # Limit to 3 keywords
+                param_name = f"pattern{i}"
+                conditions.append(f"(description ILIKE :{param_name} OR llm_summary ILIKE :{param_name})")
+                params[param_name] = f"%{keyword}%"
+            
+            where_clause = " OR ".join(conditions)
+            
             res = s.execute(
                 text(
-                    """
+                    f"""
                     SELECT id, video_id, ts_start_sec, ts_end_sec, description, llm_summary, objects,
                            0.5 AS score
                     FROM highlights
-                    WHERE description ILIKE :pattern OR llm_summary ILIKE :pattern
+                    WHERE {where_clause}
                     ORDER BY video_id, ts_start_sec
                     LIMIT :k
                     """
                 ),
-                {"pattern": search_pattern, "k": top_k},
+                params,
             )
             return [dict(r._mapping) for r in res]

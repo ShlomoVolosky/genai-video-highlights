@@ -28,6 +28,10 @@ class ChatService:
             try:
                 q_emb = self.embedder.embed(question)
                 rows = self.repo.vector_search(q_emb, top_k=self.top_k)
+                # If vector search returns no results, fall back to keyword search
+                if not rows:
+                    print("⚠️ Vector search returned no results, falling back to keyword search")
+                    rows = self.repo.keyword_search(question, top_k=self.top_k)
             except Exception as e:
                 print(f"⚠️ Vector search failed: {e}, falling back to keyword search")
                 rows = self.repo.keyword_search(question, top_k=self.top_k)
