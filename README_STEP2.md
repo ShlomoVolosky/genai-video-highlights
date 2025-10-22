@@ -31,14 +31,16 @@ web/
 
 ## 🔄 Chat Flow
 
-1. **User Input**: User enters question in React frontend
+1. **User Input**: User enters natural language question in React frontend
 2. **API Request**: Frontend sends POST to `/chat/query` with question
-3. **Search Logic**: Backend determines search method:
-   - **With LLM API Key**: Uses embeddings → vector search in pgvector
-   - **Without API Key**: Falls back to keyword ILIKE search
-4. **Database Query**: Searches highlights table for relevant matches
-5. **Response Assembly**: Builds coherent answer from DB-only content
-6. **Frontend Display**: Shows answer and matching highlights with timestamps
+3. **Search Logic**: Backend uses intelligent dual-search approach:
+   - **Primary**: Vector search with LLM embeddings (Claude/Gemini/OpenAI)
+   - **Fallback**: Smart keyword extraction + PostgreSQL ILIKE search
+   - **Auto-fallback**: If vector search returns no results, automatically falls back to keyword search
+4. **Natural Language Processing**: Extracts meaningful keywords from questions like "What happened during the journey?" → "journey"
+5. **Database Query**: Searches highlights table for semantically or textually relevant matches
+6. **Response Assembly**: Builds coherent, timestamped answer from DB-only content
+7. **Frontend Display**: Shows structured answer and individual matching highlights
 
 ## 🚀 How to Start
 
@@ -116,17 +118,26 @@ FastAPI automatic documentation at http://localhost:8000/docs
 
 ## 🔍 Search Methods
 
-### 1. Vector Search (with LLM API key)
-- Uses Claude/Gemini/OpenAI embeddings
-- Performs cosine similarity search in pgvector
-- Returns semantically relevant highlights
-- Sorted by relevance score
+### 1. Vector Search (Primary Method)
+- **Embeddings**: Uses Claude/Gemini/OpenAI embeddings (768-dimensional vectors)
+- **Database**: Performs cosine similarity search in pgvector extension
+- **Semantic Understanding**: Finds conceptually related content, not just exact matches
+- **Integration**: SQLAlchemy ORM with `cosine_distance()` for optimal performance
+- **Sorting**: Results ordered by semantic relevance score
 
-### 2. Keyword Search (fallback)
-- Uses PostgreSQL ILIKE pattern matching
-- Searches `description` and `llm_summary` fields
-- Returns text-matching highlights
-- Sorted by video_id and timestamp
+### 2. Smart Keyword Search (Intelligent Fallback)
+- **Natural Language Processing**: Extracts meaningful keywords from questions
+- **Stop Word Removal**: Filters out common words ("what", "the", "during", etc.)
+- **Multi-keyword Search**: Searches up to 3 most relevant keywords with OR logic
+- **Database Query**: PostgreSQL ILIKE pattern matching on `description` and `llm_summary`
+- **Example**: "What happened during the journey?" → searches for "journey"
+- **Sorting**: Results ordered by video_id and timestamp for narrative flow
+
+### 3. Automatic Fallback Logic
+- **Primary Attempt**: Always tries vector search first (if LLM client available)
+- **Smart Fallback**: If vector search returns 0 results, automatically switches to keyword search
+- **Error Handling**: If vector search fails due to technical issues, falls back gracefully
+- **No API Key**: Directly uses keyword search when no LLM API keys are configured
 
 ## 🧪 Testing
 
@@ -139,21 +150,37 @@ The system automatically detects available LLM API keys and chooses the appropri
 ## 🛠️ Technical Details
 
 ### Database Integration
-- Reuses Step 1 PostgreSQL database
-- Queries `highlights` table with pgvector extension
-- Maintains referential integrity with `videos` table
+- **PostgreSQL + pgvector**: Reuses Step 1 database with vector extension
+- **Vector Storage**: 768-dimensional embeddings stored as `vector(768)` type
+- **Indexes**: Optimized with IVFFlat index for fast cosine similarity search
+- **Referential Integrity**: Maintains relationships with `videos` table
 
 ### LLM Client Support
-- **Claude**: Hash-based 768-dimensional embeddings
-- **Gemini**: Native text-embedding-004 model
-- **OpenAI**: text-embedding-3-small model
-- **Fallback**: Keyword search when no API keys available
+- **UnifiedLLMClient**: Automatically detects and uses available API keys
+- **Claude**: Hash-based 768-dimensional embeddings (deterministic)
+- **Gemini**: Native text-embedding-004 model (semantic)
+- **OpenAI**: text-embedding-3-small model (768-dim semantic)
+- **Priority Order**: Gemini → OpenAI → Claude → Keyword fallback
+
+### Vector Search Implementation
+- **SQLAlchemy ORM**: Uses `Highlight.embedding.cosine_distance()` for optimal performance
+- **Cosine Similarity**: `1 - cosine_distance` for relevance scoring
+- **Error Handling**: Graceful fallback to keyword search on any vector search failure
+- **Performance**: Leverages pgvector's optimized C implementation
+
+### Smart Keyword Processing
+- **NLP Pipeline**: Extracts meaningful terms from natural language
+- **Stop Words**: Removes 50+ common English stop words
+- **Multi-term Search**: Combines up to 3 keywords with OR logic
+- **Pattern Matching**: Uses PostgreSQL ILIKE for case-insensitive search
+- **Field Coverage**: Searches both `description` and `llm_summary` columns
 
 ### Docker Configuration
-- Backend: Python FastAPI with uvicorn
-- Frontend: Node.js with Vite dev server
-- Database: Shared PostgreSQL from Step 1
-- Networking: Internal Docker network communication
+- **Backend**: Python FastAPI with uvicorn auto-reload
+- **Frontend**: Node.js with Vite dev server (hot reload)
+- **Database**: Shared PostgreSQL from Step 1 with health checks
+- **Networking**: Internal Docker network communication
+- **Volumes**: Persistent database storage with proper initialization
 
 ## 🔧 Development
 
@@ -189,10 +216,27 @@ npm run dev
 
 ## 🎯 Example Queries
 
-- "What happened after the person got out of the car?"
-- "Show me scenes with people walking"
-- "Find highlights about vehicles"
-- "What objects were detected in the videos?"
-- "Show me the most confident highlights"
+### ✅ **Working Natural Language Questions:**
+- **"What happened during the journey?"** - Returns travel/exploration scenes
+- **"Show me dramatic moments"** - Finds fire, action, and high-intensity scenes
+- **"Find scenes with movement"** - Locates travel, motion, and dynamic content
+- **"What interesting things happened?"** - Returns high-confidence highlights
 
-The system returns timestamped highlights with descriptions and summaries, allowing users to quickly find relevant video moments.
+### ✅ **Single Word Searches:**
+- **"journey"** - Travel and exploration content
+- **"fire"** - Dramatic scenes with fire and smoke
+- **"child"** - Scenic landscapes with children
+- **"water"** - Scenes featuring water elements
+- **"bicycle"** - Content with bicycles and vehicles
+
+### 🔧 **How It Works:**
+1. **Natural Language**: "What happened during the journey?" 
+   - Extracts: "journey" 
+   - Searches database for journey-related content
+   - Returns: 6 timestamped matches about travel scenes
+
+2. **Semantic Understanding**: Even without exact word matches, finds conceptually related content
+3. **Coherent Responses**: Combines multiple highlights into narrative flow with timestamps
+4. **Database-Only**: All content comes directly from processed video highlights, no AI generation
+
+The system returns timestamped highlights with descriptions and summaries, enabling users to quickly find and understand relevant video moments through natural conversation.
