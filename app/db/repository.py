@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base, Video, Highlight
 from app.config import Config
 from app.types import HighlightModel, VideoRecord
+from pgvector.sqlalchemy import Vector
 
 
 class Repository:
@@ -51,21 +52,33 @@ class Repository:
 
     def vector_search(self, query_emb: list[float], top_k: int = 5) -> list[dict]:
         with self.Session() as s:
-            # Convert list to proper vector format for pgvector
-            vector_str = "[" + ",".join(map(str, query_emb)) + "]"
-            res = s.execute(
-                text(
-                    """
-                    SELECT id, video_id, ts_start_sec, ts_end_sec, description, llm_summary, objects,
-                           1 - (embedding <=> %(q)s::vector) AS score
-                    FROM highlights
-                    ORDER BY embedding <=> %(q)s::vector
-                    LIMIT %(k)s
-                    """
-                ),
-                {"q": vector_str, "k": top_k},
-            )
-            return [dict(r._mapping) for r in res]
+            # Use SQLAlchemy ORM with pgvector
+            results = s.query(
+                Highlight.id,
+                Highlight.video_id,
+                Highlight.ts_start_sec,
+                Highlight.ts_end_sec,
+                Highlight.description,
+                Highlight.llm_summary,
+                Highlight.objects,
+                (1 - Highlight.embedding.cosine_distance(query_emb)).label('score')
+            ).order_by(
+                Highlight.embedding.cosine_distance(query_emb)
+            ).limit(top_k).all()
+            
+            return [
+                {
+                    "id": r.id,
+                    "video_id": r.video_id,
+                    "ts_start_sec": r.ts_start_sec,
+                    "ts_end_sec": r.ts_end_sec,
+                    "description": r.description,
+                    "llm_summary": r.llm_summary,
+                    "objects": r.objects,
+                    "score": float(r.score)
+                }
+                for r in results
+            ]
 
     def keyword_search(self, query: str, top_k: int = 5) -> list[dict]:
         """Keyword search using ILIKE on description and llm_summary fields"""
